@@ -1,4 +1,4 @@
 export { QueryObserver } from './QueryObserver';
-export { QueryResult, read } from './read';
-export { SnapshotEditor } from './SnapshotEditor';
+export { QueryResult, ReplayLogFile, read } from './read';
+export { EditedSnapshot, SnapshotEditor } from './SnapshotEditor';
 export { write } from './write';

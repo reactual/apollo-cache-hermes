@@ -2,8 +2,9 @@ import { DocumentNode } from 'graphql'; // eslint-disable-line import/no-extrane
 import lodashIsEqual = require('lodash.isequal');
 
 import { expandVariables } from '../DynamicField';
+import { NodeSnapshot } from '../nodes';
 import { JsonObject } from '../primitive';
-import { EntityId, ParsedQuery, Query } from '../schema';
+import { EntityId, NodeId, ParsedQuery, Query } from '../schema';
 import { addToSet, addTypenameToDocument, isObject } from '../util';
 
 import { QueryInfo } from './QueryInfo';
@@ -48,6 +49,12 @@ export namespace CacheContext {
     entityTransformer?: EntityTransformer;
   }
 
+  export interface WriteHistory {
+    oldSnapshotValueBeforeWrite: { [Key in NodeId]: NodeSnapshot; }; 
+    writeSnapshotValue: { [Key in NodeId]: NodeSnapshot; };
+    writePayload: JsonObject;
+    writeQuery: Query; 
+  }
 }
 
 /**
@@ -68,9 +75,14 @@ export class CacheContext {
   /** All currently known & parsed queries, for identity mapping. */
   private readonly _parsedQueriesMap = new Map<string, ParsedQuery[]>();
   /** All queries that have been successfully written to the cache. */
-  private readonly _writtenQueries = new Set<ParsedQuery>();
+  private  _writtenQueries = new Set<ParsedQuery>();
   /** The logger we should use. */
   private readonly _logger: CacheContext.Logger;
+
+  /** The previous n-1 snapshot capturing during write
+   * @internal
+   */
+  public previousWrite: CacheContext.WriteHistory;
 
   constructor(config: CacheContext.Configuration = {}) {
     this._addTypename = config.addTypename || false;
@@ -140,6 +152,10 @@ export class CacheContext {
     addToSet(this._writtenQueries, parsed);
   }
 
+  markAQueryWritten(parseQuery: ParsedQuery): void {
+    this._writtenQueries.add(parseQuery);
+  }
+
   /**
    * Whether we've previously written a query to the cache (and that reads
    * against it should be considered complete).
@@ -149,6 +165,16 @@ export class CacheContext {
    */
   wasQueryWritten(parsed: ParsedQuery): boolean {
     return this._writtenQueries.has(parsed);
+  }
+
+  // @internal
+  getQueryWrittenAsArray() {
+    return Array.from(this._writtenQueries);
+  }
+
+  // @internal
+  setQueryWrittenFromArray(parsedQuery: ParsedQuery[]) {
+    this._writtenQueries = new Set(parsedQuery);
   }
 
   /**

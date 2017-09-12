@@ -17,5 +17,11 @@ export function write(context: CacheContext, snapshot: GraphSnapshot, query: Que
   // around a context object anyway.
   const editor = new SnapshotEditor(context, snapshot);
   editor.mergePayload(query, payload);
-  return editor.commit();
+  const commitedSnapshot = editor.commit();
+  context.previousWrite = {
+    oldSnapshotValueBeforeWrite: snapshot._values,
+    writeSnapshotValue: commitedSnapshot.snapshot._values,
+    writePayload: payload,
+    writeQuery: query };
+  return commitedSnapshot;
 }

@@ -1,3 +1,5 @@
+import * as CircularJson from 'circular-json';
+import * as FileSaver from 'file-saver';
 import { JsonObject, JsonValue, PathPart } from '../primitive';
 import { DynamicField, DynamicFieldMap } from '../DynamicField';
 import { nodeIdForParameterizedValue } from './SnapshotEditor';
@@ -17,6 +19,12 @@ export interface QueryResult {
 export interface QueryResultWithNodeIds extends QueryResult {
   /** The ids of nodes selected by the query (if requested). */
   nodeIds: Set<NodeId>;
+}
+
+export interface ReplayLogFile {
+  previousWrite: CacheContext.WriteHistory;
+  readQuery: Query;
+  writtenQueries: ParsedQuery[];
 }
 
 /**
@@ -42,10 +50,20 @@ export function read(context: CacheContext, query: Query, snapshot: GraphSnapsho
     // TODO: Once we've nailed down all the bugs; consider skipping
     // _visitSelection for known complete queries (and drop nodeIds tracking?)
     if (!complete && context.wasQueryWritten(parsed)) {
+      debugger;
       context.error(`Hermes BUG: the most recently written query was marked incomplete`, {
         queryName: parsed.info.operationName,
         query: parsed.info.operationSource,
       });
+
+      const blob = new Blob([CircularJson.stringify(
+        {
+          previousWrite: context.previousWrite,
+          readQuery: query,
+          writtenQueries: context.getQueryWrittenAsArray(),
+        })],
+        {type : 'application/json'});
+      FileSaver.saveAs(blob, `Hermes-Snapshot-${Date.now()}`);
       // Recover in this case.
       complete = true;
     }
@@ -136,20 +154,22 @@ export function _walkAndOverlayDynamicValues(
           childId = nodeIdForParameterizedValue(containerId, [...path, fieldName], field.args);
           const childSnapshot = snapshot.getNodeSnapshot(childId);
           if (childSnapshot) {
+            child = _wrapValue(childSnapshot.node, context);
             child = childSnapshot.node;
           }
         } else {
-          child = value[fieldName];
+          // child = value[fieldName];
+          child = _wrapValue(value[fieldName], context);
         }
         field = field!.children;
       } else {
-        child = value[key];
+        // child = value[key];
+        child = _wrapValue(value[key], context);
       }
 
       // Should we continue the walk?
-      if (field && !(field instanceof DynamicField) && child !== null) {
+      if (field && !(field instanceof DynamicField) && child !== null && child) {
         if (Array.isArray(child)) {
-          child = [...child];
           for (let i = child.length - 1; i >= 0; i--) {
             if (child[i] === null) continue;
             child[i] = _wrapValue(child[i], context);
@@ -157,20 +177,19 @@ export function _walkAndOverlayDynamicValues(
           }
 
         } else {
-          child = _wrapValue(child, context);
           queue.push(new OverlayWalkNode(child, containerId, field as DynamicFieldMap, [...path, fieldName]))
         }
       }
 
       // Because key is already a field alias, result will be written correctly using alias as key
-      value[key] = child;
+      value[key] = child ? child : null;
     }
   }
 
   return newResult;
 }
 
-function _wrapValue(value: JsonValue, context: CacheContext): any {
+function _wrapValue(value: JsonValue | undefined, context: CacheContext): any {
   if (value === undefined) return {};
   if (Array.isArray(value)) return [...value];
   if (isObject(value)) {
