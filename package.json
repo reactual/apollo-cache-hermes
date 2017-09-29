@@ -52,7 +52,7 @@
     "graphql": "^0.10.5",
     "graphql-tag": "^2.4.2",
     "jest": "^21.0.1",
-    "jest-junit": "^3.0.0",
+    "jest-junit": "^3.1.0",
     "rimraf": "^2.6.1",
     "typescript": "^2.5.2",
     "typescript-eslint-parser": "^8.0.0"
